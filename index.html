@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MultiViewer 12</title>
+<style>
+:root{--bg:#0b0d10;--panel:#14181d;--line:#232a33;--tx:#e6eaf0;--mu:#8793a3;--ac:#e5322d;--ok:#2ecc71}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:14px system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden}
+#app{display:flex;flex-direction:column;height:100%}
+#top{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{font-weight:800;letter-spacing:.08em;margin-right:8px}
+.brand i{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ac);margin-right:7px;animation:p 1.6s infinite}
+@keyframes p{50%{opacity:.25}}
+.grp{display:flex;gap:4px;padding-right:8px;margin-right:2px;border-right:1px solid var(--line)}
+button,select,input,textarea{font:inherit;color:var(--tx)}
+.btn{background:#1d232b;border:1px solid var(--line);padding:6px 11px;border-radius:6px;cursor:pointer;transition:.15s}
+.btn:hover{background:#27303a}.btn.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.sp{flex:1}.clock{color:var(--mu);font-variant-numeric:tabular-nums}
+#grid{flex:1;display:grid;gap:4px;padding:4px;min-height:0;position:relative}
+.cell{position:relative;background:#000;border:2px solid transparent;border-radius:4px;overflow:hidden;min-height:0}
+.cell.hidden{display:none}
+.cell.audio{border-color:var(--ok)}
+.cell.drag{outline:2px dashed var(--ac)}
+.cell.focus{position:fixed;inset:46px 0 0 0;z-index:50;border-radius:0}
+.cell iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--mu);background:repeating-linear-gradient(45deg,#0e1115,#0e1115 12px,#101419 12px,#101419 24px)}
+.shield{position:absolute;inset:0;cursor:pointer;z-index:2}
+body.ctrl .shield{display:none}
+.hd{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:4px;padding:4px 6px;background:linear-gradient(#000d,#0000);opacity:.18;transition:opacity .2s;cursor:grab}
+.cell:hover .hd,.hd:focus-within{opacity:1}
+.nm{flex:1;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px #000}
+.dot{width:8px;height:8px;border-radius:50%;background:#555}.audio .dot{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.ib{background:#000a;border:1px solid #fff2;border-radius:5px;padding:2px 6px;cursor:pointer;font-size:13px}
+.ib:hover{background:#fff3}
+.ov{position:fixed;inset:0;background:#000b;z-index:100;display:none;align-items:center;justify-content:center;padding:12px}
+.ov.show{display:flex}
+.md{background:var(--panel);border:1px solid var(--line);border-radius:10px;width:min(640px,100%);max-height:92vh;overflow:auto;padding:18px}
+.md h3{margin:0 0 12px}
+label{display:block;color:var(--mu);font-size:12px;margin:10px 0 4px}
+input[type=text],textarea{width:100%;background:#0d1014;border:1px solid var(--line);border-radius:6px;padding:8px}
+textarea{min-height:200px;font-family:monospace;font-size:12px}
+.pl{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.pl .btn{padding:4px 9px;font-size:12px}
+.row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.hint{color:var(--mu);font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="top">
+  <span class="brand"><i></i>MULTIVIEWER</span>
+  <div class="grp" id="layouts">
+   <button class="btn" data-l="2x2">2×2 · 4</button>
+   <button class="btn" data-l="3x3">3×3 · 9</button>
+   <button class="btn" data-l="4x3">4×3 · 12</button>
+  </div>
+  <div class="grp">
+   <button class="btn" id="muteAll">🔇 Tüm Sesleri Kapat</button>
+   <button class="btn" id="ctrl" title="Videolara doğrudan tıklayıp YouTube kontrollerini kullan">🖱 Kontrol Modu</button>
+   <button class="btn" id="reload">⟳ Yenile</button>
+  </div>
+  <div class="grp">
+   <button class="btn" id="lst">📋 Kanal Listesi</button>
+   <button class="btn" id="fs">⛶ Tam Ekran</button>
+  </div>
+  <span class="sp"></span>
+  <span class="clock" id="clk"></span>
+ </div>
+ <div id="grid"></div>
+</div>
+
+<div class="ov" id="ovSet"><div class="md">
+ <h3>⚙️ Kanal Ayarları <span id="slotNo" style="color:var(--mu);font-weight:400"></span></h3>
+ <label>Kanal adı</label><input type="text" id="fName" placeholder="Örn. Al Jazeera">
+ <label>YouTube Video ID / Video URL / Embed URL / Kanal ID (UC…)</label>
+ <input type="text" id="fSrc" placeholder="dQw4w9WgXcQ  veya  https://youtube.com/watch?v=…  veya  UCNye-wNBqNL5ZzHSJj3l8Bg">
+ <div class="hint">Kanal ID (UC…) girerseniz kanalın canlı yayını açılır. @isim bağlantıları gömülemez; kanal ID'sini kullanın.</div>
+ <label>Hazır kanal listesi (tıkla → doldur)</label>
+ <div class="pl" id="presets"></div>
+ <div class="row">
+  <button class="btn" id="sClear">🗑 Kanalı Boşalt</button>
+  <button class="btn" id="sSavePre">★ Hazır Listeye Ekle</button>
+  <span class="sp"></span>
+  <button class="btn" id="sCancel">İptal</button>
+  <button class="btn on" id="sOk">Kaydet</button>
+ </div>
+</div></div>
+
+<div class="ov" id="ovLst"><div class="md">
+ <h3>📋 Kanal Listesi (JSON)</h3>
+ <div class="hint">Tüm kanalları ve hazır listeyi buradan yedekleyin ya da başka cihaza aktarın. Düzenleyip "Uygula"ya basın.</div>
+ <textarea id="json" spellcheck="false"></textarea>
+ <div class="row">
+  <button class="btn" id="lCopy">Kopyala</button>
+  <button class="btn" id="lReset">Varsayılana Dön</button>
+  <span class="sp"></span>
+  <button class="btn" id="lClose">Kapat</button>
+  <button class="btn on" id="lApply">Uygula</button>
+ </div>
+</div></div>
+
+<script>
+const N=12, KEY='mv12.v1';
+const DEF_PRESETS=[
+ ['Al Jazeera English','UCNye-wNBqNL5ZzHSJj3l8Bg'],['DW News','UCknLrEdhRCp1aegoMqRaCZg'],
+ ['France 24 EN','UCQfwfsi5VrQ8yKZ-UWmAEFg'],['Sky News','UCoMdktPbSTixAyNGwb-UYkQ'],
+ ['Euronews EN','UCSrZ3UV4jOidv8ppoVuvW9Q'],['Bloomberg TV','UCIALMKvObZNtJ6AmdCLP7Lg'],
+ ['TRT World','UC7fWeaHhqgM4Ry-RMpM2YYw'],['WION','UC_gUM8rL-Lrg6O3adPW9K1g'],
+ ['CNA','UC83jt4dlz1Gjl58fzQrrKZg'],['CGTN','UCgrNz-aDmcr2uuto8_DL2jg'],
+ ['ABC News AU','UCVgO39Bk5sMo66-6o6Spn6Q'],['NASA','UCLA_DiR1FfKNvjuUpBHmylQ']
+].map(([name,src])=>({name,src}));
+
+let S=load();
+function def(){return{layout:'4x3',ctrl:false,order:[...Array(N).keys()],
+  slots:DEF_PRESETS.slice(0,N).map(p=>({...p})),presets:DEF_PRESETS.map(p=>({...p}))}}
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.slots&&s.slots.length===N)return s}catch(e){}return def()}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+
+const $=s=>document.querySelector(s), grid=$('#grid');
+let audioId=null, editing=null, focusId=null, dragId=null;
+
+function embedUrl(src){
+ src=(src||'').trim(); if(!src)return'';
+ let m;
+ if(/^https?:\/\//i.test(src)){
+  if((m=src.match(/\/channel\/(UC[\w-]{22})/)))return mk('live_stream','channel='+m[1]);
+  if((m=src.match(/youtube(?:-nocookie)?\.com\/embed\/([\w-]{11})/)))return mk(m[1]);
+  if((m=src.match(/[?&]v=([\w-]{11})/)))return mk(m[1]);
+  if((m=src.match(/youtu\.be\/([\w-]{11})/)))return mk(m[1]);
+  if((m=src.match(/\/(?:live|shorts)\/([\w-]{11})/)))return mk(m[1]);
+  if((m=src.match(/[?&]channel=(UC[\w-]{22})/)))return mk('live_stream','channel='+m[1]);
+  return '';
+ }
+ if(/^UC[\w-]{22}$/.test(src))return mk('live_stream','channel='+src);
+ if(/^[\w-]{11}$/.test(src))return mk(src);
+ return '';
+ function mk(id,extra){
+  return 'https://www.youtube.com/embed/'+id+'?autoplay=1&mute=1&playsinline=1&rel=0&enablejsapi=1'+(extra?'&'+extra:'')+'&origin='+encodeURIComponent(location.origin==='null'?'':location.origin);
+ }
+}
+
+/* ---- build cells once; reorder with CSS order so iframes never reload ---- */
+const cells=[];
+for(let i=0;i<N;i++){
+ const c=document.createElement('div'); c.className='cell'; c.dataset.id=i;
+ c.innerHTML=`<div class="hd" draggable="true"><span class="dot"></span><span class="nm"></span>
+  <button class="ib" data-a="snd" title="Sesi aç/kapat">🔈</button>
+  <button class="ib" data-a="left" title="Geri taşı">⬅️</button>
+  <button class="ib" data-a="right" title="İleri taşı">➡️</button>
+  <button class="ib" data-a="foc" title="Odaklan / küçült">⤢</button>
+  <button class="ib" data-a="set" title="Ayarlar">⚙️</button></div>
+  <div class="body"></div><div class="shield"></div>`;
+ grid.appendChild(c); cells.push(c);
+ c.addEventListener('click',e=>{
+  const b=e.target.closest('[data-a]');
+  if(b){act(i,b.dataset.a);return}
+  if(e.target.classList.contains('shield')){
+   if(!S.slots[i].src){openSet(i);return}
+   clickT=clickT||setTimeout(()=>{clickT=0;toggleAudio(i)},230);
+  }
+ });
+ c.querySelector('.shield').addEventListener('dblclick',()=>{clearTimeout(clickT);clickT=0;toggleFocus(i)});
+ const hd=c.querySelector('.hd');
+ hd.addEventListener('dragstart',e=>{dragId=i;e.dataTransfer.setData('text/plain',i)});
+ c.addEventListener('dragover',e=>{if(dragId!==null){e.preventDefault();c.classList.add('drag')}});
+ c.addEventListener('dragleave',()=>c.classList.remove('drag'));
+ c.addEventListener('drop',e=>{e.preventDefault();c.classList.remove('drag');if(dragId!==null&&dragId!==i)swapSlots(dragId,i);dragId=null});
+}
+let clickT=0;
+
+function renderSlot(i){
+ const c=cells[i], s=S.slots[i], body=c.querySelector('.body');
+ c.querySelector('.nm').textContent=s.name||('Kanal '+(i+1));
+ const url=embedUrl(s.src);
+ if(body.dataset.url===url)return;
+ body.dataset.url=url;
+ if(url){
+  body.innerHTML='<iframe allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>';
+  const f=body.firstChild; f.src=url;
+  f.addEventListener('load',()=>{ping(i);applyAudio(i)});
+ }else body.innerHTML='<div class="empty"><div style="font-size:28px">＋</div><div>Boş — kanal eklemek için ⚙️</div></div>';
+}
+function layout(){
+ const [cols,rows]=S.layout.split('x').map(Number), n=cols*rows;
+ grid.style.gridTemplateColumns=`repeat(${cols},1fr)`;
+ grid.style.gridTemplateRows=`repeat(${rows},1fr)`;
+ document.querySelectorAll('#layouts .btn').forEach(b=>b.classList.toggle('on',b.dataset.l===S.layout));
+ cells.forEach((c,i)=>{
+  const pos=S.order.indexOf(i);
+  c.style.order=pos; c.classList.toggle('hidden',pos>=n);
+ });
+ if(audioId!==null&&S.order.indexOf(audioId)>=n)setAudio(null);
+ if(focusId!==null&&S.order.indexOf(focusId)>=n)toggleFocus(focusId);
+}
+function renderAll(){cells.forEach((c,i)=>renderSlot(i));layout();audioUI();document.body.classList.toggle('ctrl',S.ctrl);$('#ctrl').classList.toggle('on',S.ctrl)}
+
+/* ---- YouTube iframe commands via postMessage (no external API needed) ---- */
+function post(i,func){
+ const f=cells[i].querySelector('iframe'); if(!f||!f.contentWindow)return;
+ f.contentWindow.postMessage(JSON.stringify({event:'command',func,args:''}),'*');
+}
+function ping(i){const f=cells[i].querySelector('iframe');if(f&&f.contentWindow)f.contentWindow.postMessage(JSON.stringify({event:'listening',id:i}),'*')}
+function applyAudio(i){if(audioId===i){post(i,'unMute');post(i,'setVolume')}else post(i,'mute');post(i,'playVideo')}
+function setAudio(id){
+ const prev=audioId; audioId=id;
+ if(prev!==null&&prev!==id)post(prev,'mute');
+ if(id!==null){post(id,'unMute');post(id,'playVideo')}
+ audioUI();
+}
+function toggleAudio(i){setAudio(audioId===i?null:i)}
+function audioUI(){cells.forEach((c,i)=>{c.classList.toggle('audio',audioId===i);c.querySelector('[data-a=snd]').textContent=audioId===i?'🔊':'🔈'});
+ $('#muteAll').classList.toggle('on',audioId===null)}
+function toggleFocus(i){
+ const c=cells[i];
+ if(focusId===i){c.classList.remove('focus');focusId=null;return}
+ if(focusId!==null)cells[focusId].classList.remove('focus');
+ focusId=i;c.classList.add('focus');
+ if(audioId!==i)setAudio(i);
+}
+
+/* ---- ordering ---- */
+function swapSlots(a,b){const o=S.order,x=o.indexOf(a),y=o.indexOf(b);[o[x],o[y]]=[o[y],o[x]];save();layout()}
+function move(i,d){
+ const o=S.order,n=Number(S.layout[0])*Number(S.layout[2]),p=o.indexOf(i),q=p+d;
+ if(q<0||q>=n)return; swapSlots(i,o[q]);
+}
+function act(i,a){
+ if(a==='snd')toggleAudio(i);
+ else if(a==='left')move(i,-1);
+ else if(a==='right')move(i,1);
+ else if(a==='foc')toggleFocus(i);
+ else if(a==='set')openSet(i);
+}
+
+/* ---- settings modal ---- */
+function drawPresets(){
+ const box=$('#presets');box.innerHTML='';
+ S.presets.forEach((p,k)=>{
+  const b=document.createElement('button');b.className='btn';b.textContent=p.name;b.title='Sağ tık: listeden sil';
+  b.onclick=()=>{$('#fName').value=p.name;$('#fSrc').value=p.src};
+  b.oncontextmenu=e=>{e.preventDefault();if(confirm(p.name+' hazır listeden silinsin mi?')){S.presets.splice(k,1);save();drawPresets()}};
+  box.appendChild(b);
+ });
+}
+function openSet(i){
+ editing=i;$('#slotNo').textContent='— Kutu '+(i+1);
+ $('#fName').value=S.slots[i].name||'';$('#fSrc').value=S.slots[i].src||'';
+ drawPresets();$('#ovSet').classList.add('show');$('#fName').focus();
+}
+const closeSet=()=>{$('#ovSet').classList.remove('show');editing=null};
+$('#sCancel').onclick=closeSet;
+$('#sOk').onclick=()=>{
+ const src=$('#fSrc').value.trim();
+ if(src&&!embedUrl(src)){alert('Geçersiz YouTube Video ID / URL / Kanal ID.');return}
+ S.slots[editing]={name:$('#fName').value.trim(),src};
+ save();renderSlot(editing);closeSet();
+};
+$('#sClear').onclick=()=>{S.slots[editing]={name:'',src:''};if(audioId===editing)audioId=null;save();renderSlot(editing);audioUI();closeSet()};
+$('#sSavePre').onclick=()=>{
+ const name=$('#fName').value.trim(),src=$('#fSrc').value.trim();
+ if(!name||!embedUrl(src)){alert('Önce geçerli bir ad ve kaynak girin.');return}
+ S.presets.push({name,src});save();drawPresets();
+};
+
+/* ---- list modal ---- */
+$('#lst').onclick=()=>{
+ $('#json').value=JSON.stringify({layout:S.layout,slots:S.slots,presets:S.presets},null,1);
+ $('#ovLst').classList.add('show');
+};
+$('#lClose').onclick=()=>$('#ovLst').classList.remove('show');
+$('#lCopy').onclick=()=>{$('#json').select();try{document.execCommand('copy')}catch(e){}};
+$('#lApply').onclick=()=>{
+ try{
+  const d=JSON.parse($('#json').value);
+  if(!Array.isArray(d.slots))throw 0;
+  const sl=[];for(let i=0;i<N;i++){const s=d.slots[i]||{};sl.push({name:String(s.name||''),src:String(s.src||'')})}
+  S.slots=sl;if(Array.isArray(d.presets))S.presets=d.presets.filter(p=>p&&p.src).map(p=>({name:String(p.name||p.src),src:String(p.src)}));
+  if(['2x2','3x3','4x3'].includes(d.layout))S.layout=d.layout;
+  save();renderAll();$('#ovLst').classList.remove('show');
+ }catch(e){alert('JSON geçersiz.')}
+};
+$('#lReset').onclick=()=>{if(confirm('Tüm ayarlar varsayılana dönsün mü?')){audioId=null;S=def();save();document.querySelectorAll('.body').forEach(b=>b.dataset.url='x');renderAll();$('#ovLst').classList.remove('show')}};
+
+/* ---- top bar ---- */
+document.querySelectorAll('#layouts .btn').forEach(b=>b.onclick=()=>{S.layout=b.dataset.l;save();layout()});
+$('#muteAll').onclick=()=>setAudio(null);
+$('#ctrl').onclick=()=>{S.ctrl=!S.ctrl;save();document.body.classList.toggle('ctrl',S.ctrl);$('#ctrl').classList.toggle('on',S.ctrl)};
+$('#reload').onclick=()=>{cells.forEach(c=>{const b=c.querySelector('.body'),u=b.dataset.url;if(u){b.dataset.url='';}});renderAll()};
+$('#fs').onclick=()=>{document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{})};
+document.querySelectorAll('.ov').forEach(o=>o.addEventListener('mousedown',e=>{if(e.target===o)o.classList.remove('show')}));
+document.addEventListener('keydown',e=>{
+ if(e.target.matches('input,textarea'))return;
+ if(e.key==='Escape'){document.querySelectorAll('.ov').forEach(o=>o.classList.remove('show'));if(focusId!==null)toggleFocus(focusId)}
+ else if(e.key==='m'||e.key==='M')setAudio(null);
+ else if(e.key==='f'||e.key==='F')$('#fs').click();
+ else if(e.key>='1'&&e.key<='9'){const p=+e.key-1,id=S.order[p];if(id!==undefined&&!cells[id].classList.contains('hidden'))toggleAudio(id)}
+});
+setInterval(()=>{$('#clk').textContent=new Date().toLocaleTimeString('tr-TR')},1000);
+
+renderAll();
+</script>
+</body>
+</html>
